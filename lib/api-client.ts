@@ -5,7 +5,7 @@
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/+$/, "") ||
   "http://localhost:8000";
-
+console.log(BACKEND_URL)
 type FetchOptions = {
   /** Bypass the Next.js cache (used by polling endpoints). */
   noStore?: boolean;
