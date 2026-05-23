@@ -3,26 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { apiClient } from "@/lib/api-client";
 import { IArrow, ICheck } from "./icons";
 
 type Busy = "scan" | "demo" | null;
-
-// Replace this with your real API client. The interface is:
-//   apiClient.post<T>(path, body?) → Promise<T>
-const apiClient = {
-  async post<T>(path: string, body?: unknown): Promise<T> {
-    const res = await fetch(
-      (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000") + path,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      },
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json() as Promise<T>;
-  },
-};
 
 export function HeroForm() {
   const router = useRouter();

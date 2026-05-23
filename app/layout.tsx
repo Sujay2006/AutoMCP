@@ -33,10 +33,27 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_URL),
   title: "MCPBuilder.ai — The bridge between AI and your business",
   description:
     "Make your website AI-ready in 60 seconds. ChatGPT, Claude, and Siri can then search your products, take orders, and book appointments — automatically.",
+  openGraph: {
+    title: "MCPBuilder.ai — The bridge between AI and your business",
+    description:
+      "Make your website AI-ready in 60 seconds. ChatGPT, Claude, and Siri can then search your products, take orders, and book appointments — automatically.",
+    url: APP_URL,
+    siteName: "MCPBuilder.ai",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MCPBuilder.ai — The bridge between AI and your business",
+    description:
+      "Make your website AI-ready in 60 seconds. ChatGPT, Claude, and Siri can then search your products, take orders, and book appointments — automatically.",
+  },
 };
 
 export default function RootLayout({

@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { InstallSnippets } from "@/components/install-snippets";
 import { buttonVariants } from "@/components/ui/button";
+import { apiClient } from "@/lib/api-client";
+import type { Project } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +15,10 @@ export default async function SuccessPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const project = await apiClient.getOrNull<Project>(`/api/scan/${id}`, {
+    noStore: true,
+  });
+  if (!project) notFound();
 
   return (
     <AppShell width="3xl" crumbs={[{ label: "Live" }]}>
@@ -26,7 +34,11 @@ export default async function SuccessPage({
         </p>
       </div>
 
-      {/* <InstallSnippets mcpUrl={...} /> */}
+      {project.mcp_url && (
+        <div className="mt-10">
+          <InstallSnippets mcpUrl={project.mcp_url} />
+        </div>
+      )}
 
       <div className="mt-12 flex flex-wrap justify-center gap-3">
         <Link href="/" className={buttonVariants({ size: "lg" })}>

@@ -1,0 +1,1 @@
+"""AutoMCP FastAPI backend."""

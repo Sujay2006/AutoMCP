@@ -1,0 +1,24 @@
+# Don't ship the local dev environment into the image.
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Local secrets — Railway injects env vars at runtime instead.
+.env
+.env.*
+!.env.example
+
+# Test scripts aren't needed in the production image.
+test_*.py
+
+# IDE / VCS
+.git/
+.gitignore
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Docs
+README.md
