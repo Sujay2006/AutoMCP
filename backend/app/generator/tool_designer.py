@@ -131,8 +131,9 @@ def _normalize_tool(t: dict[str, Any]) -> ProposedTool:
 
 async def design_tools(actions: list[DetectedAction]) -> list[ProposedTool]:
     """Turn raw detected actions into clean MCP tool definitions via Groq."""
-    # Cap input — 20 detected actions is plenty for 5-10 designed tools.
-    limited = actions[:20]
+    # Cap input — 10 detected actions is plenty for 5-10 designed tools
+    # and keeps the request under llama-3.1-8b-instant's 6000 TPM limit.
+    limited = actions[:10]
     user_content = (
         "Detected actions from this website:\n\n"
         f"{json.dumps([a.model_dump() for a in limited], indent=2)}\n\n"

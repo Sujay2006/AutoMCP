@@ -37,7 +37,7 @@ async def call_groq(system_prompt: str, user_prompt: str) -> Any:
         ],
         response_format={"type": "json_object"},
         temperature=0.3,
-        max_tokens=4096,
+        max_tokens=2000,
     )
     content = response.choices[0].message.content
     if not content:
