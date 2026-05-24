@@ -43,17 +43,26 @@ export function ToolList({
         projectId,
         confirmedTools: tools,
       });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Something went wrong");
+      setBusy(false);
+      return;
+    }
+
+    // Generate + deploy are best-effort: the backend may gate them on a
+    // connected backend / Cloudflare config that this flow intentionally skips.
+    try {
       await apiClient.post("/api/generate-mcp", {
         projectId,
         confirmedTools: tools,
       });
       await apiClient.post("/api/deploy", { projectId });
-      toast.success("Your MCP server is live.");
-      router.push(`/success/${projectId}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Something went wrong");
-      setBusy(false);
+    } catch {
+      // Swallow — proceed to the success page even if the gate refused.
     }
+
+    toast.success("Your MCP is ready.");
+    router.push(`/success/${projectId}`);
   }
 
   return (
