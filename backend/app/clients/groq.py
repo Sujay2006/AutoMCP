@@ -12,7 +12,7 @@ from groq import AsyncGroq
 
 from app.config import settings
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "llama-3.1-8b-instant"
 
 _client: AsyncGroq | None = None
 
