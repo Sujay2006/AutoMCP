@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { InstallSnippets } from "@/components/install-snippets";
 import { buttonVariants } from "@/components/ui/button";
@@ -9,16 +9,30 @@ import type { Project } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+type RagStats = {
+  ready: boolean;
+  total_tools: number;
+  categories: string[];
+  category_count?: number;
+  recent_retrievals?: { count: number; average: number | null };
+};
+
 export default async function SuccessPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const project = await apiClient.getOrNull<Project>(`/api/scan/${id}`, {
-    noStore: true,
-  });
+  const [project, ragStats] = await Promise.all([
+    apiClient.getOrNull<Project>(`/api/scan/${id}`, { noStore: true }),
+    apiClient.getOrNull<RagStats>("/api/rag/stats", { noStore: true }),
+  ]);
   if (!project) notFound();
+
+  const ragReady = ragStats?.ready && (ragStats?.total_tools ?? 0) > 0;
+  const recent = ragStats?.recent_retrievals;
+  const avgSim =
+    recent && recent.average != null ? Math.round(recent.average * 100) : null;
 
   return (
     <AppShell width="3xl" crumbs={[{ label: "Live" }]}>
@@ -32,6 +46,22 @@ export default async function SuccessPage({
         <p className="mt-3 text-pretty text-muted-foreground">
           Project <span className="font-medium text-foreground">{id}</span> is now available to any AI agent.
         </p>
+
+        {ragReady && (
+          <div className="mx-auto mt-6 inline-flex items-center gap-2 rounded-full border border-[var(--coral)]/30 bg-[var(--soft)] px-4 py-2 text-sm text-[var(--coral)]">
+            <Sparkles className="size-4" />
+            <span>
+              RAG matched similar tools from our{" "}
+              <span className="font-semibold">{ragStats!.total_tools}</span>-tool
+              knowledge base across{" "}
+              <span className="font-semibold">
+                {ragStats!.category_count ?? ragStats!.categories.length}
+              </span>{" "}
+              categories
+              {avgSim !== null ? `, avg similarity ${avgSim}%` : ""}.
+            </span>
+          </div>
+        )}
       </div>
 
       {project.mcp_url && (

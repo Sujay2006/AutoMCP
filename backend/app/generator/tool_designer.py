@@ -1,7 +1,10 @@
 """Groq tool designer — port of automcp/lib/generator/tool-designer.ts.
 
 Same system prompt and JSON-schema normalization as the TS version, so output
-is identical for the same input.
+is identical for the same input. Augmented with a RAG few-shot block: for each
+detected action we retrieve semantically similar tools from our curated MCP
+knowledge base (Supabase pgvector) and inject the best matches as examples
+into the Groq prompt.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from app.models import (
     JsonSchemaProperty,
     ProposedTool,
 )
+from app.rag.retriever import retrieve_similar_tools
 
 SYSTEM_PROMPT = """You are designing a Model Context Protocol (MCP) tool set for an AI agent to use.
 
@@ -129,17 +133,81 @@ def _normalize_tool(t: dict[str, Any]) -> ProposedTool:
     )
 
 
+async def _build_few_shot_block(actions: list[DetectedAction]) -> tuple[str, int]:
+    """Retrieve similar tools for each action, dedupe, and format as few-shot.
+
+    Returns (block_text, distinct_examples_used). Empty block if RAG is
+    unavailable — the designer still runs without examples.
+
+    Tuned for llama-3.1-8b-instant's 6000 TPM ceiling: k=2 per action and a
+    hard cap of 3 distinct examples keeps the prompt small enough to share
+    the budget with 10 detected actions + the JSON response.
+    """
+    seen: dict[str, dict[str, Any]] = {}
+    for action in actions:
+        query = f"{action.name}. {action.description}".strip()
+        if not query:
+            continue
+        try:
+            hits = await retrieve_similar_tools(query, k=2)
+        except Exception as e:
+            print(f"[rag] retrieve failed for action '{action.name}': {e}")
+            continue
+        for hit in hits:
+            name = hit.get("tool_name")
+            if not name:
+                continue
+            prior = seen.get(name)
+            if prior is None or hit.get("similarity", 0) > prior.get("similarity", 0):
+                seen[name] = hit
+
+    examples = sorted(
+        seen.values(), key=lambda h: h.get("similarity", 0), reverse=True
+    )[:3]
+    if not examples:
+        return "", 0
+
+    rendered = []
+    for ex in examples:
+        rendered.append(
+            f'  - name: "{ex["tool_name"]}"\n'
+            f'    description: "{ex["description"]}"\n'
+            f'    category: {ex.get("category", "n/a")}\n'
+            f'    source: {ex.get("source_mcp", "n/a")}\n'
+            f'    inputSchema: {json.dumps(ex.get("input_schema") or {})}'
+        )
+
+    block = (
+        "\n\nHere are examples of well-designed MCP tools for similar APIs, "
+        "retrieved from our curated knowledge base of real-world MCP servers. "
+        "Use these as style and naming references — match their level of "
+        "agent-friendly description writing, but design tools specific to the "
+        "actions you were given:\n\n" + "\n\n".join(rendered)
+    )
+    print(f"[rag] injected {len(examples)} few-shot examples into Groq prompt")
+    return block, len(examples)
+
+
 async def design_tools(actions: list[DetectedAction]) -> list[ProposedTool]:
-    """Turn raw detected actions into clean MCP tool definitions via Groq."""
+    """Turn raw detected actions into clean MCP tool definitions via Groq.
+
+    Augments the Groq system prompt with RAG-retrieved few-shot examples from
+    our curated MCP knowledge base, so generation is grounded in real-world
+    patterns instead of pure LLM hallucination.
+    """
     # Cap input — 10 detected actions is plenty for 5-10 designed tools
     # and keeps the request under llama-3.1-8b-instant's 6000 TPM limit.
     limited = actions[:10]
+
+    few_shot_block, _ = await _build_few_shot_block(limited)
+    system_prompt = SYSTEM_PROMPT + few_shot_block
+
     user_content = (
         "Detected actions from this website:\n\n"
         f"{json.dumps([a.model_dump() for a in limited], indent=2)}\n\n"
         'Design the MCP tools. Return JSON with a "tools" array.'
     )
-    parsed = await call_groq(SYSTEM_PROMPT, user_content)
+    parsed = await call_groq(system_prompt, user_content)
     raw = parsed.get("tools") if isinstance(parsed, dict) else []
     if not isinstance(raw, list):
         return []

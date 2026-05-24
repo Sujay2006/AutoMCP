@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routes import connection, deploy, generate, scan, test_tools, tools
+from app.routes import connection, deploy, generate, rag, scan, test_tools, tools
 
 app = FastAPI(
     title="AutoMCP Backend",
@@ -44,3 +44,4 @@ app.include_router(generate.router, prefix="/api")
 app.include_router(deploy.router, prefix="/api")
 app.include_router(connection.router, prefix="/api")
 app.include_router(test_tools.router, prefix="/api")
+app.include_router(rag.router, prefix="/api")
