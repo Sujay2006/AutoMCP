@@ -10,6 +10,12 @@
 !.yarn/releases
 !.yarn/versions
 
+# python virtual environments
+.venv/
+**/.venv/
+venv/
+**/venv/
+
 # testing
 /coverage
 

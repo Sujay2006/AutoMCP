@@ -34,7 +34,18 @@ const ITEMS = [
   },
   {
     q: "What's an 'MCP' anyway?",
-    a: "It's the name of the open standard that makes AI ↔ business connections work. You don't need to know more than that — same way you don't need to know what HTTPS is to use the web.",
+    a: (
+      <>
+        The Model Context Protocol (MCP), a new standard for connecting AI assistants to the systems where data lives, including content repositories, business tools, and development environments. Its aim is to help frontier models produce better, more relevant responses.{" "}
+        <a
+          href="https://www.anthropic.com/news/model-context-protocol"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          know more
+        </a>
+      </>
+    ),
   },
 ];
 
