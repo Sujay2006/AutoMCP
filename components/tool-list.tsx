@@ -23,7 +23,6 @@ export function ToolList({
   );
   const [busy, setBusy] = useState(false);
 
-  const isDemo = sourceType === "akaunting_demo";
   const enabledCount = useMemo(
     () => tools.filter((t) => t.enabled).length,
     [tools],
@@ -40,26 +39,17 @@ export function ToolList({
     }
     setBusy(true);
     try {
-      // Persist the user's enable/description edits in both paths.
       await apiClient.post("/api/confirmed-tools", {
         projectId,
         confirmedTools: tools,
       });
-
-      if (isDemo) {
-        // Akaunting demo: skip the backend-wiring steps and go straight to
-        // generate + deploy (the Worker serves baked-in mock data).
-        await apiClient.post("/api/generate-mcp", {
-          projectId,
-          confirmedTools: tools,
-        });
-        await apiClient.post("/api/deploy", { projectId });
-        toast.success("Your demo MCP server is live.");
-        router.push(`/success/${projectId}`);
-      } else {
-        // Real path: backend connection comes next.
-        router.push(`/connect/${projectId}`);
-      }
+      await apiClient.post("/api/generate-mcp", {
+        projectId,
+        confirmedTools: tools,
+      });
+      await apiClient.post("/api/deploy", { projectId });
+      toast.success("Your MCP server is live.");
+      router.push(`/success/${projectId}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Something went wrong");
       setBusy(false);
@@ -91,12 +81,10 @@ export function ToolList({
           {busy ? (
             <>
               <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              {isDemo ? "Generating & deploying…" : "Saving…"}
+              Generating & deploying…
             </>
-          ) : isDemo ? (
-            "Generate Demo MCP →"
           ) : (
-            "Continue → Connect backend"
+            "Generate MCP →"
           )}
         </Button>
       </div>
