@@ -45,6 +45,25 @@ async def generate_mcp(req: GenerateMcpRequest) -> GenerateMcpResponse:
 
     is_demo = project.get("source_type") == "akaunting_demo"
 
+    if not is_demo:
+        if not project.get("backend_config"):
+            raise HTTPException(
+                400, f"Connect a backend first: /connect/{req.projectId}"
+            )
+        results = project.get("tool_test_results") or {}
+        failing = [
+            t
+            for t in enabled
+            if not (results.get(t.name) or {}).get("pass")
+        ]
+        if failing:
+            names = ", ".join(t.name for t in failing)
+            raise HTTPException(
+                400,
+                f"{len(failing)} tool(s) haven't passed testing yet: {names}. "
+                f"Visit /map/{req.projectId} to test them.",
+            )
+
     server_name = f"mcp-{str(req.projectId)[:8]}"
     backend_raw = project.get("backend_config")
     backend = BackendConfig.model_validate(backend_raw) if backend_raw else None
