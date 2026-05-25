@@ -9,11 +9,15 @@ Turn any website or GitHub repo into an AI-agent-ready **MCP server** in under
 
 1. Paste a GitHub repo URL or website URL.
 2. Gemini 2.5 Flash scans the code and extracts user-facing actions.
-3. Llama 3.3 70B (via Groq) designs a clean set of MCP tools.
-4. You confirm/edit the tools in the UI.
-5. (Real-backend path) Connect your live API + verify each tool with a probe.
-6. We render a working MCP server and deploy it to Cloudflare Workers.
-7. You get a stable URL to paste into Claude.ai, ChatGPT, or Cursor.
+3. **RAG retrieves semantically similar real-world MCP tools** from our curated
+   Supabase pgvector knowledge base (106 tools across 9 categories) and injects
+   them as few-shot examples into the Groq prompt — so generation is grounded
+   in real patterns, not LLM hallucination.
+4. Llama 3.1 8B Instant (via Groq) designs a clean set of MCP tools.
+5. You confirm/edit the tools in the UI.
+6. (Real-backend path) Connect your live API + verify each tool with a probe.
+7. We render a working MCP server and deploy it to Cloudflare Workers.
+8. You get a stable URL to paste into Claude.ai, ChatGPT, or Cursor.
 
 The Akaunting demo button on the landing page is a one-click shortcut — it
 skips the scan + backend steps and ships an MCP with baked-in mock data.
@@ -28,14 +32,15 @@ skips the scan + backend steps and ships an MCP with baked-in mock data.
 │                     │         │      .up.railway.app         │
 └─────────────────────┘         └──────────────┬───────────────┘
                                                 │
-                          ┌─────────────────────┼─────────────────────┐
-                          ▼                     ▼                     ▼
-                    ┌──────────┐         ┌──────────┐         ┌──────────────┐
-                    │ Supabase │         │  Gemini  │         │   Cloudflare │
-                    │ Postgres │         │   Groq   │         │   Workers    │
-                    │  projects│         │   APIs   │         │ (generated   │
-                    │  table   │         │          │         │  MCP target) │
-                    └──────────┘         └──────────┘         └──────────────┘
+       ┌────────────────────┬───────────────────┼───────────────────┬────────────────────┐
+       ▼                    ▼                   ▼                   ▼                    ▼
+┌────────────┐      ┌────────────────┐    ┌──────────┐       ┌──────────┐       ┌──────────────┐
+│  Supabase  │      │   Supabase     │    │  Gemini  │       │   Groq   │       │   Cloudflare │
+│  Postgres  │      │   pgvector     │    │   API    │       │   API    │       │   Workers    │
+│  projects  │      │   RAG KB       │    │ (scanner)│       │ (designer│       │ (generated   │
+│   table    │      │ (106 tools,    │    │          │       │  + RAG)  │       │  MCP target) │
+│            │      │  vector(384))  │    │          │       │          │       │              │
+└────────────┘      └────────────────┘    └──────────┘       └──────────┘       └──────────────┘
 ```
 
 Generated MCP servers stay **TypeScript** (Cloudflare Workers runtime). The
@@ -53,7 +58,9 @@ so the output is structurally always valid.
 | Backend hosting | Railway (Docker) |
 | Database | Supabase (Postgres) |
 | Scanner LLM | Gemini 2.5 Flash |
-| Tool designer LLM | Llama 3.3 70B via Groq |
+| Tool designer LLM | Llama 3.1 8B Instant via Groq |
+| RAG embedding model | `sentence-transformers/all-MiniLM-L6-v2` (384-dim, local) |
+| RAG vector store | Supabase pgvector + cosine-similarity RPC |
 | Generated MCP runtime | Cloudflare Workers (TypeScript ES module) |
 
 ## Repository layout
@@ -76,15 +83,18 @@ MCPBuilder/
 │   │   │   ├── demo.py            # hand-curated Akaunting data
 │   │   │   ├── routes/            # one router per concern
 │   │   │   ├── scanner/           # github fetch + classify + filter + Gemini extract
-│   │   │   ├── generator/         # Groq tool designer + Worker code renderer
+│   │   │   ├── generator/         # Groq tool designer (RAG-augmented) + Worker code renderer
+│   │   │   ├── rag/               # custom RAG: embedder, retriever, knowledge_base.jsonl
 │   │   │   ├── deployer/          # Cloudflare Workers upload
 │   │   │   ├── clients/           # gemini, groq, supabase wrappers
 │   │   │   └── backend_auth/      # auth.py — basic/bearer/api_key_header/api_key_query
+│   │   ├── scripts/               # build_embeddings.py + load_to_supabase.py (RAG bootstrap)
 │   │   ├── templates/             # mcp-server.ts.tmpl (the Cloudflare Worker template)
-│   │   ├── Dockerfile             # Python 3.12 slim, listens on $PORT
+│   │   ├── Dockerfile             # Python 3.12 slim, preloads sentence-transformers, listens on $PORT
 │   │   ├── requirements.txt
 │   │   └── .env.example
 │   ├── supabase-schema.sql        # canonical projects-table schema
+│   ├── rag-schema.sql             # pgvector + mcp_knowledge_base table + match_tools RPC
 │   ├── package.json               # frontend deps
 │   └── .env.example               # frontend env (NEXT_PUBLIC_BACKEND_URL etc.)
 └── nextjs-backend-archive/        # historical: the original TypeScript backend (Phase 8'd out)
@@ -131,9 +141,31 @@ Open http://localhost:3000.
 
 ## Supabase setup
 
-Run `automcp/supabase-schema.sql` once in the Supabase SQL editor. It creates
-the `projects` table with all required columns (including `current_step`,
-`fetch_progress`, `backend_config`, `tool_test_results`).
+Run **both** SQL files once in the Supabase SQL editor:
+
+1. `supabase-schema.sql` — creates the `projects` table with all required
+   columns (`current_step`, `fetch_progress`, `backend_config`,
+   `tool_test_results`).
+2. `rag-schema.sql` — enables the `vector` extension, creates
+   `mcp_knowledge_base` (with a `vector(384)` embedding column), and defines
+   the `match_tools` cosine-similarity RPC used by the retriever.
+
+## RAG knowledge base bootstrap
+
+The first time you set up RAG (and any time you update `knowledge_base.jsonl`),
+populate the vector store from the `backend/` directory:
+
+```bash
+.venv/Scripts/python -m scripts.build_embeddings   # embeds knowledge_base.jsonl with all-MiniLM-L6-v2
+.venv/Scripts/python -m scripts.load_to_supabase   # wipes + reinserts into mcp_knowledge_base
+```
+
+Verify retrieval is wired correctly with `GET /api/rag/stats` — you should see
+`{"ready": true, "total_tools": 106, "category_count": 9, ...}`.
+
+During every `/api/scan` the backend logs
+`[rag] injected N few-shot examples into Groq prompt`. The success page
+renders a badge confirming RAG fired for that run.
 
 ## Production deploy
 
